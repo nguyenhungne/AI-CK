@@ -1,0 +1,189 @@
+@startuml Go Game 9x9 Class Diagram
+
+skinparam classAttributeIconSize 0
+skinparam classFontStyle bold
+
+package "Models" {
+    class Board {
+        - size: int
+        - grid: List[List[Optional[str]]]
+        - previous_hash: Optional[int]
+        + __init__(size: int)
+        + get_stone(row: int, col: int): Optional[str]
+        + place_stone(row: int, col: int, color: str): bool
+        + remove_stone(row: int, col: int): void
+        + remove_stones(positions: List[Tuple]): void
+        + get_group(row: int, col: int): Set[Tuple]
+        + get_liberties(row: int, col: int): int
+        + get_group_liberties(group: Set): Set[Tuple]
+        + find_captured_stones(opponent_color: str): List[Tuple]
+        + is_valid_move(row: int, col: int, color: str, ko_hash: int): bool
+        + board_hash(): int
+        + clone(): Board
+        + get_empty_positions(): List[Tuple]
+        + count_empty(): int
+        + get_all_groups(color: str): List[Set]
+    }
+
+    class GameState {
+        + current_player: str
+        + captured_black: int
+        + captured_white: int
+        + move_history: List[Move]
+        + consecutive_passes: int
+        + ko_position: Optional[int]
+        + game_over: bool
+        + winner: Optional[str]
+        + resigned: bool
+        + switch_player(): void
+        + add_move(move: Move): void
+        + add_captures(color: str, count: int): void
+        + get_opponent(color: str): str
+        + reset(): void
+    }
+
+    class Move {
+        + row: int
+        + col: int
+        + color: str
+        + is_pass: bool
+    }
+
+    GameState "1" *-- "*" Move : contains
+}
+
+package "Controllers" {
+    class GameController {
+        - mode: str
+        - board: Board
+        - state: GameState
+        - on_state_change: Callable
+        + __init__(mode: str)
+        + start_game(): void
+        + make_move(row: int, col: int): bool
+        + pass_turn(): void
+        + resign(): void
+        + get_current_player(): str
+        + is_game_over(): bool
+        + calculate_score(): Dict[str, int]
+        + get_valid_moves(): List[Tuple]
+        + get_last_move(): Optional[Move]
+    }
+
+    GameController "1" *-- "1" Board : manages
+    GameController "1" *-- "1" GameState : tracks
+}
+
+package "Players" {
+    abstract class Player {
+        # color: str
+        + __init__(color: str)
+        + {abstract} get_move(board: Board): Optional[Tuple]
+    }
+
+    class HumanPlayer {
+        - pending_move: Optional[Tuple]
+        + get_move(board: Board): Optional[Tuple]
+        + set_move(row: int, col: int): void
+        + clear_move(): void
+    }
+
+    class AIPlayer {
+        - ai: MinimaxAI
+        - captured_stones: int
+        - opponent_captured: int
+        + __init__(color: str, depth_limit: int)
+        + get_move(board: Board): Optional[Tuple]
+        + update_captures(captured_by_ai: int, captured_by_opponent: int): void
+    }
+
+    Player <|-- HumanPlayer
+    Player <|-- AIPlayer
+}
+
+package "AI" {
+    class MinimaxAI {
+        - TIMEOUT: float
+        - MAX_CACHE_SIZE: int
+        - fixed_depth: Optional[int]
+        - heuristic: HeuristicEvaluator
+        - start_time: float
+        - nodes_evaluated: int
+        - transposition_table: Dict
+        + __init__(depth_limit: int)
+        + get_adaptive_depth(board: Board): int
+        + find_best_move(board: Board, color: str, ...): Optional[Tuple]
+        + minimax(board: Board, depth: int, alpha: float, beta: float, ...): float
+        + get_possible_moves(board: Board, color: str): List[Tuple]
+    }
+
+    class HeuristicEvaluator {
+        - WEIGHT_TERRITORY: float
+        - WEIGHT_GROUP_STRENGTH: float
+        - WEIGHT_CAPTURES: float
+        - WEIGHT_STRATEGIC: float
+        - corner_positions: List[Tuple]
+        - star_points: List[Tuple]
+        - edge_positions: List[Tuple]
+        + evaluate(board: Board, color: str, ...): float
+        + evaluate_territory(board: Board, color: str): float
+        + evaluate_groups(board: Board, color: str): float
+        + evaluate_captures(board: Board, color: str, ...): float
+        + evaluate_strategic_positions(board: Board, color: str): float
+    }
+
+    MinimaxAI "1" *-- "1" HeuristicEvaluator : uses
+    AIPlayer "1" *-- "1" MinimaxAI : uses
+}
+
+package "UI" {
+    class GameUI {
+        - controller: GameController
+        - screen: Surface
+        - clock: Clock
+        - font: Font
+        - hover_pos: Optional[Tuple]
+        - show_game_over_overlay: bool
+        - buttons: List[Button]
+        + __init__(controller: GameController)
+        + draw(): void
+        + handle_event(event: Event): Optional[Tuple]
+        + update(): void
+        + quit(): void
+    }
+
+    class Button {
+        - rect: Rect
+        - text: str
+        - callback: Callable
+        - color: Tuple
+        - hover_color: Tuple
+        - is_hovered: bool
+        + __init__(x: int, y: int, width: int, height: int, ...)
+        + draw(surface: Surface): void
+        + handle_event(event: Event): bool
+        + set_text(text: str): void
+    }
+
+    GameUI "1" *-- "*" Button : contains
+    GameUI "1" --> "1" GameController : controls
+}
+
+package "Main" {
+    class GoGame {
+        - controller: GameController
+        - ui: GameUI
+        - black_player: Player
+        - white_player: Player
+        - ai_thinking: bool
+        - ai_move: Optional[Tuple]
+        + __init__()
+        + run(): void
+    }
+
+    GoGame "1" *-- "1" GameController : owns
+    GoGame "1" *-- "1" GameUI : owns
+    GoGame "1" *-- "2" Player : manages
+}
+
+@enduml
