@@ -8,7 +8,7 @@ Depth Limit Strategy:
 This adaptive approach ensures AI responds within 5 seconds while maximizing search depth.
 """
 import time
-import random
+import logging
 from typing import Tuple, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -16,11 +16,23 @@ if TYPE_CHECKING:
 
 from src.ai.heuristic import HeuristicEvaluator
 
+# Setup logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# Console handler
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('[%(levelname)s] %(name)s: %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+
 
 class MinimaxAI:
     """Implements Heuristic Minimax Search with alpha-beta pruning."""
     
-    TIMEOUT = 5.0  # Maximum time for move calculation in seconds
+    TIMEOUT = 20.0  # Maximum time for move calculation in seconds
     MAX_CACHE_SIZE = 10000  # Maximum transposition table entries
     
     def __init__(self, depth_limit: Optional[int] = None):
@@ -37,6 +49,8 @@ class MinimaxAI:
         self.captured_by_ai = 0
         self.captured_by_opponent = 0
         self.transposition_table = {}  # Cache for evaluated positions
+        self.timeout_occurred = False  # Track if timeout happened
+        self.cache_hits = 0  # Track cache hits
     
     def get_adaptive_depth(self, board: 'Board') -> int:
         """
@@ -51,11 +65,11 @@ class MinimaxAI:
         empty_count = board.count_empty()
         
         if empty_count > 60:
-            return 2  # Opening: high branching factor
+            return 1  # Opening: high branching factor
         elif empty_count > 30:
-            return 3  # Middle game
+            return 2  # Middle game
         else:
-            return 4  # Endgame: lower branching factor
+            return 3  # Endgame: lower branching factor
     
     def find_best_move(self, board: 'Board', color: str, 
                        captured_by_ai: int = 0, 
@@ -74,26 +88,37 @@ class MinimaxAI:
         """
         self.start_time = time.time()
         self.nodes_evaluated = 0
+        self.timeout_occurred = False
+        self.cache_hits = 0
         self.captured_by_ai = captured_by_ai
         self.captured_by_opponent = captured_by_opponent
         
         # Clear transposition table if too large
         if len(self.transposition_table) > self.MAX_CACHE_SIZE:
+            logger.debug(f"Clearing transposition table (size: {len(self.transposition_table)})")
             self.transposition_table.clear()
         
         depth = self.get_adaptive_depth(board)
         moves = self.get_possible_moves(board, color)
+        empty_count = board.count_empty()
+        
+        logger.info(f"=== AI Turn ({color}) ===")
+        logger.info(f"Empty positions: {empty_count}, Search depth: {depth}, Possible moves: {len(moves)}")
         
         if not moves:
+            logger.warning("No valid moves available!")
             return None
         
         best_move = moves[0]
         best_score = float('-inf')
         alpha = float('-inf')
         beta = float('inf')
+        moves_evaluated = 0
         
         for move in moves:
             if self._is_timeout():
+                self.timeout_occurred = True
+                logger.warning(f"TIMEOUT after evaluating {moves_evaluated}/{len(moves)} moves!")
                 break
             
             # Simulate move
@@ -116,6 +141,19 @@ class MinimaxAI:
                 best_move = move
             
             alpha = max(alpha, score)
+            moves_evaluated += 1
+        
+        # Log results
+        elapsed_time = time.time() - self.start_time
+        logger.info(f"Best move: {best_move}, Score: {best_score:.2f}")
+        logger.info(f"Time: {elapsed_time:.3f}s, Nodes: {self.nodes_evaluated}, Cache hits: {self.cache_hits}")
+        
+        if self.timeout_occurred:
+            logger.warning(f"Search incomplete due to timeout ({self.TIMEOUT}s limit)")
+        else:
+            logger.info("Search completed successfully")
+        
+        logger.info(f"{'='*30}")
         
         return best_move
 
@@ -143,6 +181,7 @@ class MinimaxAI:
         # Check transposition table
         board_key = (board.board_hash(), depth, maximizing, ai_captures, opponent_captures)
         if board_key in self.transposition_table:
+            self.cache_hits += 1
             return self.transposition_table[board_key]
         
         # Terminal conditions
