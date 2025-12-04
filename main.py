@@ -19,29 +19,58 @@ class GoGame:
         self.black_player = HumanPlayer('black')
         self.white_player = HumanPlayer('white')
         
+        # Human player color in AI mode (default: black)
+        self.human_color = 'black'
+        
         # AI computation state
         self.ai_thinking = False
         self.ai_move = None
         
         # Set up state change callback
         self.controller.on_state_change = self._on_state_change
+        
+        # Set up swap team callback
+        self.ui.on_swap_team_callback = self._on_swap_team
     
     def _on_state_change(self) -> None:
         """Handle game state changes."""
         # Update AI player captures if in AI mode
-        if self.controller.mode == 'human_vs_ai' and isinstance(self.white_player, AIPlayer):
-            self.white_player.update_captures(
+        ai_player = self._get_ai_player()
+        if ai_player:
+            ai_player.update_captures(
                 self.controller.state.captured_black,
                 self.controller.state.captured_white
             )
     
+    def _on_swap_team(self) -> None:
+        """Handle swap team - switch human player color."""
+        self.human_color = 'white' if self.human_color == 'black' else 'black'
+        self.ui.human_color = self.human_color  # Sync with UI
+        self._setup_players()
+        self.controller.start_game()
+        self.ai_move = None
+        self.ai_thinking = False
+    
+    def _get_ai_player(self):
+        """Get the AI player if exists."""
+        if self.controller.mode == 'human_vs_ai':
+            if isinstance(self.black_player, AIPlayer):
+                return self.black_player
+            if isinstance(self.white_player, AIPlayer):
+                return self.white_player
+        return None
+    
     def _setup_players(self) -> None:
         """Set up players based on game mode."""
-        self.black_player = HumanPlayer('black')
-        
         if self.controller.mode == 'human_vs_ai':
-            self.white_player = AIPlayer('white')
+            if self.human_color == 'black':
+                self.black_player = HumanPlayer('black')
+                self.white_player = AIPlayer('white')
+            else:
+                self.black_player = AIPlayer('black')
+                self.white_player = HumanPlayer('white')
         else:
+            self.black_player = HumanPlayer('black')
             self.white_player = HumanPlayer('white')
     
     def _get_current_player_obj(self):
@@ -52,8 +81,9 @@ class GoGame:
     
     def _compute_ai_move(self) -> None:
         """Compute AI move in background thread."""
-        if isinstance(self.white_player, AIPlayer):
-            self.ai_move = self.white_player.get_move(self.controller.board)
+        ai_player = self._get_ai_player()
+        if ai_player:
+            self.ai_move = ai_player.get_move(self.controller.board)
         self.ai_thinking = False
     
     def _handle_ai_turn(self) -> None:
@@ -62,9 +92,10 @@ class GoGame:
             return
         
         current = self.controller.get_current_player()
+        ai_color = 'white' if self.human_color == 'black' else 'black'
         
         # Check if it's AI's turn
-        if self.controller.mode == 'human_vs_ai' and current == 'white':
+        if self.controller.mode == 'human_vs_ai' and current == ai_color:
             if not self.ai_thinking and self.ai_move is None:
                 # Start AI computation in background
                 self.ai_thinking = True
@@ -113,7 +144,7 @@ class GoGame:
                     # Only allow human moves
                     is_human_turn = (
                         self.controller.mode == 'human_vs_human' or
-                        (self.controller.mode == 'human_vs_ai' and current == 'black')
+                        (self.controller.mode == 'human_vs_ai' and current == self.human_color)
                     )
                     
                     if is_human_turn:

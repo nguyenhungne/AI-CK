@@ -93,10 +93,22 @@ class GameUI:
             color=(80, 80, 120), hover_color=(100, 100, 150)
         )
         
+        self.btn_swap_team = Button(
+            btn_x, 500, btn_width, btn_height, "Swap Team",
+            callback=self._on_swap_team,
+            color=(120, 100, 80), hover_color=(150, 130, 100)
+        )
+        
         self.buttons = [
             self.btn_new_game, self.btn_pass, self.btn_resign,
-            self.btn_vs_human, self.btn_vs_ai
+            self.btn_vs_human, self.btn_vs_ai, self.btn_swap_team
         ]
+        
+        # Callback for swap team (to be set by main)
+        self.on_swap_team_callback = None
+        
+        # Human player color (to be set by main)
+        self.human_color = 'black'
 
     def _on_new_game(self) -> None:
         """Handle new game button click."""
@@ -118,6 +130,13 @@ class GameUI:
         """Set game mode and restart."""
         self.controller.mode = mode
         self.controller.start_game()
+        self.show_game_over_overlay = False
+    
+    def _on_swap_team(self) -> None:
+        """Handle swap team button click."""
+        if self.on_swap_team_callback:
+            self.on_swap_team_callback()
+            # Don't call start_game here - callback handles it
         self.show_game_over_overlay = False
     
     def _board_to_pixel(self, row: int, col: int) -> Tuple[int, int]:
@@ -280,12 +299,18 @@ class GameUI:
         # Mode indicator
         mode_text = "Human vs Human" if self.controller.mode == 'human_vs_human' else "Human vs AI"
         mode_label = self.small_font.render(f"Mode: {mode_text}", True, (180, 180, 180))
-        self.screen.blit(mode_label, (self.INFO_PANEL_X + 20, 370))
+        self.screen.blit(mode_label, (self.INFO_PANEL_X + 20, 350))
+        
+        # Your team indicator (only in AI mode)
+        if self.controller.mode == 'human_vs_ai':
+            team_text = f"You: {self.human_color.capitalize()}"
+            team_label = self.small_font.render(team_text, True, (180, 180, 180))
+            self.screen.blit(team_label, (self.INFO_PANEL_X + 20, 375))
         
         # Move count
         move_count = len(self.controller.state.move_history)
         moves_text = self.small_font.render(f"Moves: {move_count}", True, (180, 180, 180))
-        self.screen.blit(moves_text, (self.INFO_PANEL_X + 20, 520))
+        self.screen.blit(moves_text, (self.INFO_PANEL_X + 20, 550))
     
     def _draw_game_over(self) -> None:
         """Draw game over overlay."""
