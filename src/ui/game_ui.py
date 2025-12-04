@@ -363,9 +363,11 @@ class GameUI:
         Returns:
             Board position if valid click, None otherwise
         """
-        # Handle overlay button if game over
-        if self.show_game_over_overlay and hasattr(self, 'overlay_button'):
-            self.overlay_button.handle_event(event)
+        # When modal is showing, only handle overlay button
+        if self.show_game_over_overlay:
+            if hasattr(self, 'overlay_button'):
+                self.overlay_button.handle_event(event)
+            return None
         
         # Handle regular buttons
         for button in self.buttons:
@@ -377,10 +379,9 @@ class GameUI:
             self.hover_pos = pos
         
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if not self.show_game_over_overlay:
-                pos = self._pixel_to_board(event.pos[0], event.pos[1])
-                if pos:
-                    return pos
+            pos = self._pixel_to_board(event.pos[0], event.pos[1])
+            if pos:
+                return pos
         
         return None
     
